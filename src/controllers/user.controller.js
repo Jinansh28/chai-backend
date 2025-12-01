@@ -2,12 +2,14 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import {ApiError} from "../utils/ApiError.js"
 import { User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
+import {v2 as cloudinary} from "cloudinary"
+import { extractPublicId } from 'cloudinary-build-url';
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken"
 import mongoose from "mongoose";
 
 
-const generateAccessAndRefereshTokens = async(userId) =>{
+const generateAccessAndRefreshTokens = async(userId) =>{
     try {
         const user = await User.findById(userId)
         const accessToken = user.generateAccessToken()
@@ -107,7 +109,7 @@ const loginUser = asyncHandler(async (req, res) =>{
     //send cookie
 
     const {email, username, password} = req.body
-    console.log(email);
+    // console.log(email);
 
     if (!username && !email) {
         throw new ApiError(400, "username or email is required")
@@ -133,7 +135,7 @@ const loginUser = asyncHandler(async (req, res) =>{
     throw new ApiError(401, "Invalid user credentials")
     }
 
-   const {accessToken, refreshToken} = await generateAccessAndRefereshTokens(user._id)
+   const {accessToken, refreshToken} = await generateAccessAndRefreshTokens(user._id)
 
     const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
 
@@ -144,8 +146,8 @@ const loginUser = asyncHandler(async (req, res) =>{
 
     return res
     .status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
+    .cookie("accessToken", accessToken, [options])
+    .cookie("refreshToken", refreshToken, [options])
     .json(
         new ApiResponse(
             200, 
@@ -184,8 +186,7 @@ const logoutUser = asyncHandler(async(req, res) => {
 })
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
-    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
-
+    const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken
     if (!incomingRefreshToken) {
         throw new ApiError(401, "unauthorized request")
     }
@@ -212,7 +213,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             secure: true
         }
     
-        const {accessToken, newRefreshToken} = await generateAccessAndRefereshTokens(user._id)
+        const {accessToken, newRefreshToken} = await generateAccessAndRefreshTokens(user._id)
     
         return res
         .status(200)
@@ -233,9 +234,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
 const changeCurrentPassword = asyncHandler(async(req, res) => {
     const {oldPassword, newPassword} = req.body
-
     
-
     const user = await User.findById(req.user?._id)
     const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
 
@@ -295,6 +294,11 @@ const updateUserAvatar = asyncHandler(async(req, res) => {
 
     //TODO: delete old image - assignment
 
+    const avatarPublicId = extractPublicId(req.user?.avatar);
+    if(avatarPublicId){
+        await cloudinary.uploader.destroy(publicId).then(result => console.log(result));
+    }
+
     const avatar = await uploadOnCloudinary(avatarLocalPath)
 
     if (!avatar.url) {
@@ -327,7 +331,10 @@ const updateUserCoverImage = asyncHandler(async(req, res) => {
     }
 
     //TODO: delete old image - assignment
-
+    const coverImagepublicId = extractPublicId(req.user?.avatar);
+    if(coverImagepublicId){
+        await cloudinary.uploader.destroy(coverImagepublicId).then(result => console.log(result));
+    }
 
     const coverImage = await uploadOnCloudinary(coverImageLocalPath)
 
